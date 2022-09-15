@@ -75,15 +75,29 @@ func checkHost(host string, c chan hostStatus, timeoutMillisICMP, timeoutTCPMill
 	c <- hostStatus{host, "", false}
 }
 
-func DiscoverHosts(hosts []string, verboseMode bool, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int) []string {
-
-	c := make(chan hostStatus)
-	for _, host := range hosts {
-		go checkHost(host, c, timeoutMillisICMP, timeoutTCPMillis, portCheckCount)
-
+func worker(hosts chan string, res chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int) {
+	for host := range hosts {
+		checkHost(host, res, timeoutMillisICMP, timeoutTCPMillis, portCheckCount)
 	}
+}
+
+func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount int) []string {
+	workers := make(chan string, workerCount)
+	c := make(chan hostStatus)
+	for i := 0; i < cap(workers); i++ {
+		go worker(workers, c, timeoutMillisICMP, timeoutTCPMillis, portCheckCount)
+	}
+
+	go func() {
+		for _, host := range hosts {
+			workers <- host
+		}
+	}()
+
 	result := make([]hostStatus, len(hosts))
 	activeHosts := []string{}
+	inactiveHosts := []string{}
+
 	for i, _ := range result {
 		result[i] = <-c
 		if result[i].active {
@@ -92,7 +106,19 @@ func DiscoverHosts(hosts []string, verboseMode bool, timeoutMillisICMP, timeoutT
 				fmt.Printf("%s\t%s\n", result[i].host, result[i].method)
 			}
 			//fmt.Println(result[i].host, "is up.")
+		} else {
+			inactiveHosts = append(inactiveHosts, result[i].host)
 		}
+	}
+
+	close(workers)
+	close(c)
+
+	attempts--
+	if attempts > 0 && len(inactiveHosts) > 0 {
+		fmt.Printf("Performing additional attempt on %d hosts.", len(inactiveHosts))
+		reallyActive := DiscoverHosts(inactiveHosts, verboseMode, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount)
+		activeHosts = append(activeHosts, reallyActive...)
 	}
 
 	return activeHosts

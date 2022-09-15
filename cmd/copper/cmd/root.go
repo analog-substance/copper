@@ -28,8 +28,10 @@ If a method succeeds, the host is marked as active and not touched again.
 		timeoutICMP, _ := cmd.Flags().GetInt("icmp-timeout")
 		timeoutTCP, _ := cmd.Flags().GetInt("tcp-timeout")
 		tcpPortCount, _ := cmd.Flags().GetInt("tcp-ports")
+		attempts, _ := cmd.Flags().GetInt("attempts")
 		scopeFile, _ := cmd.Flags().GetString("file")
 		verboseMode, _ := cmd.Flags().GetBool("verbose")
+		workerCount, _ := cmd.Flags().GetInt("workers")
 
 		start := time.Now()
 
@@ -71,7 +73,12 @@ If a method succeeds, the host is marked as active and not touched again.
 		//if scopeFile != "-" {
 		//	scopeReader.Close()
 		//}
-		activeHosts := lib.DiscoverHosts(hosts, verboseMode, timeoutICMP, timeoutTCP, tcpPortCount)
+
+		if workerCount == 0 {
+			workerCount = len(hosts)
+		}
+
+		activeHosts := lib.DiscoverHosts(hosts, verboseMode, attempts, timeoutICMP, timeoutTCP, tcpPortCount, workerCount)
 
 		if !verboseMode {
 			for _, host := range activeHosts {
@@ -93,8 +100,10 @@ func Execute() {
 
 func init() {
 	rootCmd.Flags().BoolP("verbose", "v", false, "Print active hosts as they are found")
-	rootCmd.Flags().IntP("icmp-timeout", "i", 1000, "ICMP timeout in milliseconds")
-	rootCmd.Flags().IntP("tcp-timeout", "t", 1000, "TCP timeout in milliseconds")
+	rootCmd.Flags().IntP("icmp-timeout", "i", 500, "ICMP timeout in milliseconds")
+	rootCmd.Flags().IntP("tcp-timeout", "t", 500, "TCP timeout in milliseconds")
 	rootCmd.Flags().IntP("tcp-ports", "T", 100, "Number of TCP ports to check")
+	rootCmd.Flags().IntP("workers", "w", 0, "Worker count. defaults to the number of hosts")
+	rootCmd.Flags().IntP("attempts", "a", 1, "Number of attempts per host")
 	rootCmd.Flags().StringP("file", "f", "scope.txt", "File with scope to check")
 }
