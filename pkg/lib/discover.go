@@ -18,7 +18,7 @@ import (
 func HostRespondsToICMP(host string, timeoutMillisICMP int) bool {
 	pinger, err := ping.NewPinger(host)
 	if err != nil {
-		panic(err)
+		return false
 	}
 	pinger.Count = 1
 	pinger.Timeout = time.Duration(timeoutMillisICMP) * time.Millisecond
