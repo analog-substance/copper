@@ -53,6 +53,10 @@ If a method succeeds, the host is marked as active and not touched again.
 		scanner := bufio.NewScanner(scopeReader)
 		for scanner.Scan() {
 			input := scanner.Text()
+			if strings.Contains(input, "*") {
+				continue
+			}
+
 			if strings.Contains(input, "/") {
 				hosts = append(hosts, lib.ExpandCIDR(input)...)
 			} else {
