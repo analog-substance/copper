@@ -116,7 +116,9 @@ func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP
 
 	attempts--
 	if attempts > 0 && len(inactiveHosts) > 0 {
-		fmt.Printf("Performing additional attempt on %d hosts.", len(inactiveHosts))
+		if verboseMode {
+			fmt.Printf("Performing additional attempt on %d hosts.\n", len(inactiveHosts))
+		}
 		reallyActive := DiscoverHosts(inactiveHosts, verboseMode, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount)
 		activeHosts = append(activeHosts, reallyActive...)
 	}
