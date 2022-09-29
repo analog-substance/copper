@@ -48,6 +48,14 @@ func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
 				return false
 			}
 
+			if strings.HasSuffix(err.Error(), "no such host") {
+				return false
+			}
+
+			if strings.HasSuffix(err.Error(), "network is unreachable") {
+				return false
+			}
+
 			if strings.HasSuffix(err.Error(), "i/o timeout") {
 				continue
 			}
