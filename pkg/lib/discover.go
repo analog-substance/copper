@@ -3,7 +3,7 @@ package lib
 import (
 	"bufio"
 	"fmt"
-	"github.com/go-ping/ping"
+	probing "github.com/prometheus-community/pro-bing"
 	"log"
 	"net"
 	"net/netip"
@@ -16,11 +16,11 @@ import (
 )
 
 func HostRespondsToICMP(host string, timeoutMillisICMP int) bool {
-	pinger, err := ping.NewPinger(host)
+	pinger, err := probing.NewPinger(host)
 	if err != nil {
 		return false
 	}
-	pinger.Count = 1
+	pinger.Count = 2
 	pinger.Timeout = time.Duration(timeoutMillisICMP) * time.Millisecond
 	pinger.Run()
 	stats := pinger.Statistics()

@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/go-ping/ping v1.1.0
+	github.com/prometheus-community/pro-bing v0.1.0
 	github.com/spf13/cobra v1.6.1
 )
 
