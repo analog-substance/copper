@@ -25,10 +25,10 @@ func HostRespondsToICMP(host string, timeoutMillisICMP int) bool {
 	pinger.Run()
 	stats := pinger.Statistics()
 
-	if stats.PacketLoss == 100 {
-		return false
+	if stats.PacketsRecv > 1 {
+		return true
 	}
-	return true
+	return false
 }
 
 func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
