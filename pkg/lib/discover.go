@@ -25,7 +25,7 @@ func HostRespondsToICMP(host string, timeoutMillisICMP int) bool {
 	pinger.Run()
 	stats := pinger.Statistics()
 
-	if stats.PacketsRecv > 1 {
+	if stats.PacketsRecv > 0 {
 		return true
 	}
 	return false
