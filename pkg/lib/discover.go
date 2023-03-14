@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	probing "github.com/prometheus-community/pro-bing"
+	"github.com/schollz/progressbar/v3"
 	"log"
 	"net"
 	"net/netip"
@@ -15,14 +16,21 @@ import (
 	"time"
 )
 
-func HostRespondsToICMP(host string, timeoutMillisICMP int) bool {
+func HostRespondsToICMP(host string, timeoutMillisICMP int, privilegedICMP bool) bool {
 	pinger, err := probing.NewPinger(host)
 	if err != nil {
 		return false
 	}
-	pinger.Count = 2
+	pinger.Count = 1
+	pinger.SetPrivileged(privilegedICMP)
 	pinger.Timeout = time.Duration(timeoutMillisICMP) * time.Millisecond
-	pinger.Run()
+	err = pinger.Run()
+	if err != nil {
+		if !strings.Contains(err.Error(), "sendto") {
+			log.Println("error running ping", host, err)
+		}
+		return false
+	}
 	stats := pinger.Statistics()
 
 	if stats.PacketsRecv > 0 {
@@ -69,13 +77,13 @@ func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
 	return false
 }
 
-func checkHost(host string, c chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int) {
-	if HostRespondsToICMP(host, timeoutMillisICMP) {
+func checkHost(host string, c chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int, privilegedICMP bool) {
+	if timeoutMillisICMP > 0 && HostRespondsToICMP(host, timeoutMillisICMP, privilegedICMP) {
 		c <- hostStatus{host, "ICMP", true}
 		return
 	}
 
-	if HostHasOpenPort(host, timeoutTCPMillis, portCheckCount) {
+	if timeoutTCPMillis > 0 && HostHasOpenPort(host, timeoutTCPMillis, portCheckCount) {
 		c <- hostStatus{host, "TCP Ports", true}
 		return
 	}
@@ -83,17 +91,20 @@ func checkHost(host string, c chan hostStatus, timeoutMillisICMP, timeoutTCPMill
 	c <- hostStatus{host, "", false}
 }
 
-func worker(hosts chan string, res chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int) {
+func worker(hosts chan string, res chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int, privilegedICMP bool) {
 	for host := range hosts {
-		checkHost(host, res, timeoutMillisICMP, timeoutTCPMillis, portCheckCount)
+		checkHost(host, res, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, privilegedICMP)
 	}
 }
 
-func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount int) []string {
+func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount int, privilegedICMP bool) []string {
+
+	bar := progressbar.Default(int64(len(hosts)))
+
 	workers := make(chan string, workerCount)
 	c := make(chan hostStatus)
 	for i := 0; i < cap(workers); i++ {
-		go worker(workers, c, timeoutMillisICMP, timeoutTCPMillis, portCheckCount)
+		go worker(workers, c, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, privilegedICMP)
 	}
 
 	go func() {
@@ -110,11 +121,14 @@ func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP
 		result[i] = <-c
 		if result[i].active {
 			activeHosts = append(activeHosts, result[i].host)
+			bar.Add(1)
+
 			if verboseMode {
 				fmt.Printf("%s\t%s\n", result[i].host, result[i].method)
 			}
 			//fmt.Println(result[i].host, "is up.")
 		} else {
+			// pin in this, we need to talk about how to handle async shit as a library
 			inactiveHosts = append(inactiveHosts, result[i].host)
 		}
 	}
@@ -127,7 +141,7 @@ func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP
 		if verboseMode {
 			fmt.Printf("Performing additional attempt on %d hosts.\n", len(inactiveHosts))
 		}
-		reallyActive := DiscoverHosts(inactiveHosts, verboseMode, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount)
+		reallyActive := DiscoverHosts(inactiveHosts, verboseMode, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount, privilegedICMP)
 		activeHosts = append(activeHosts, reallyActive...)
 	}
 

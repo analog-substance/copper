@@ -32,6 +32,7 @@ If a method succeeds, the host is marked as active and not touched again.
 		scopeFile, _ := cmd.Flags().GetString("file")
 		verboseMode, _ := cmd.Flags().GetBool("verbose")
 		workerCount, _ := cmd.Flags().GetInt("workers")
+		privilegedICMP, _ := cmd.Flags().GetBool("privileged")
 
 		start := time.Now()
 
@@ -78,7 +79,7 @@ If a method succeeds, the host is marked as active and not touched again.
 			workerCount = len(hosts)
 		}
 
-		activeHosts := lib.DiscoverHosts(hosts, verboseMode, attempts, timeoutICMP, timeoutTCP, tcpPortCount, workerCount)
+		activeHosts := lib.DiscoverHosts(hosts, verboseMode, attempts, timeoutICMP, timeoutTCP, tcpPortCount, workerCount, privilegedICMP)
 
 		if !verboseMode {
 			for _, host := range activeHosts {
@@ -100,8 +101,9 @@ func Execute() {
 
 func init() {
 	rootCmd.Flags().BoolP("verbose", "v", false, "Print active hosts as they are found")
-	rootCmd.Flags().IntP("icmp-timeout", "i", 500, "ICMP timeout in milliseconds")
-	rootCmd.Flags().IntP("tcp-timeout", "t", 500, "TCP timeout in milliseconds")
+	rootCmd.Flags().BoolP("privilegedICMP", "p", false, "Use this if using sudo rather than `sudo sysctl -w net.ipv4.ping_group_range=\"0 2147483647\"`")
+	rootCmd.Flags().IntP("icmp-timeout", "i", 500, "ICMP timeout in milliseconds. To disable ICMP checks set to 0.")
+	rootCmd.Flags().IntP("tcp-timeout", "t", 500, "TCP timeout in milliseconds.  To disable TCP checks set to 0.")
 	rootCmd.Flags().IntP("tcp-ports", "T", 100, "Number of TCP ports to check")
 	rootCmd.Flags().IntP("workers", "w", 0, "Worker count. defaults to the number of hosts")
 	rootCmd.Flags().IntP("attempts", "a", 1, "Number of attempts per host")
