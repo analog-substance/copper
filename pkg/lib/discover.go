@@ -2,6 +2,7 @@ package lib
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	probing "github.com/prometheus-community/pro-bing"
 	"github.com/schollz/progressbar/v3"
@@ -44,8 +45,7 @@ func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
 		if i == portCheckCount {
 			return false
 		}
-		d := net.Dialer{Timeout: time.Duration(timeoutTCPMillis) * time.Millisecond}
-		_, err := d.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+		err := makeTCPConnection(host, timeoutTCPMillis, port)
 
 		if err != nil {
 			if strings.HasSuffix(err.Error(), "connect: connection refused") {
@@ -68,6 +68,10 @@ func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
 				continue
 			}
 
+			if strings.HasSuffix(err.Error(), "operation was canceled") {
+				continue
+			}
+
 			println(err.Error())
 			continue
 		}
@@ -75,6 +79,20 @@ func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
 		return true
 	}
 	return false
+}
+
+func makeTCPConnection(host string, timeoutTCPMillis int, port int) error {
+	d := net.Dialer{}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutTCPMillis)*time.Millisecond)
+	//defer cancel()
+	go func() {
+		time.Sleep(time.Duration(timeoutTCPMillis) * time.Millisecond)
+		cancel()
+	}()
+	_, err := d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
+
+	//_, err := d.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+	return err
 }
 
 func checkHost(host string, c chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int, privilegedICMP bool) {
@@ -98,9 +116,7 @@ func worker(hosts chan string, res chan hostStatus, timeoutMillisICMP, timeoutTC
 }
 
 func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, workerCount int, privilegedICMP bool) []string {
-
 	bar := progressbar.Default(int64(len(hosts)))
-
 	workers := make(chan string, workerCount)
 	c := make(chan hostStatus)
 	for i := 0; i < cap(workers); i++ {
@@ -119,9 +135,9 @@ func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP
 
 	for i, _ := range result {
 		result[i] = <-c
+		bar.Add(1)
 		if result[i].active {
 			activeHosts = append(activeHosts, result[i].host)
-			bar.Add(1)
 
 			if verboseMode {
 				fmt.Printf("%s\t%s\n", result[i].host, result[i].method)
