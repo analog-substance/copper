@@ -1,21 +1,46 @@
 package lib
 
 import (
-	"bufio"
 	"context"
 	"fmt"
-	probing "github.com/prometheus-community/pro-bing"
-	"github.com/schollz/progressbar/v3"
 	"log"
 	"net"
 	"net/netip"
-	"os"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
+
+	"github.com/analog-substance/nmapservices"
+	probing "github.com/prometheus-community/pro-bing"
+	"github.com/schollz/progressbar/v3"
 )
+
+type portState int
+
+const (
+	stateClosed portState = iota
+	stateOpen
+	stateHostUnreachable
+	stateTimeout
+	stateUnknown
+)
+
+type portStatus struct {
+	port  int
+	state portState
+	err   error
+}
+
+func (p portStatus) isOpen() bool {
+	return p.state == stateOpen
+}
+
+func (p portStatus) isOpenOrClosed() bool {
+	return p.isOpen() || p.state == stateClosed
+}
+
+func (p portStatus) isHostDown() bool {
+	return p.state == stateHostUnreachable
+}
 
 func HostRespondsToICMP(host string, timeoutMillisICMP int, privilegedICMP bool) bool {
 	pinger, err := probing.NewPinger(host)
@@ -41,44 +66,69 @@ func HostRespondsToICMP(host string, timeoutMillisICMP int, privilegedICMP bool)
 }
 
 func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
-	for i, port := range ports {
-		if i == portCheckCount {
+	for _, port := range nmapservices.TopTCPPorts(portCheckCount) {
+		status := checkPort(host, timeoutTCPMillis, port.Port)
+		if status.isOpenOrClosed() {
+			return true
+		}
+
+		if status.isHostDown() {
 			return false
 		}
-		err := makeTCPConnection(host, timeoutTCPMillis, port)
 
-		if err != nil {
-			if strings.HasSuffix(err.Error(), "connect: connection refused") {
-				return true
-			}
+		if status.state == stateUnknown {
+			fmt.Println(status.err) // Kept this in here but should move this to the cobra commands
+		}
+	}
 
-			if strings.HasSuffix(err.Error(), "connect: no route to host") {
-				return false
-			}
+	return false
+}
 
-			if strings.HasSuffix(err.Error(), "no such host") {
-				return false
-			}
+func checkPort(host string, timeoutTCPMillis int, port int) portStatus {
+	status := portStatus{
+		port:  port,
+		state: stateOpen,
+	}
 
-			if strings.HasSuffix(err.Error(), "network is unreachable") {
-				return false
-			}
+	err := makeTCPConnection(host, timeoutTCPMillis, port)
+	if err != nil {
+		status.err = err
 
-			if strings.HasSuffix(err.Error(), "i/o timeout") {
-				continue
-			}
-
-			if strings.HasSuffix(err.Error(), "operation was canceled") {
-				continue
-			}
-
-			println(err.Error())
-			continue
+		if strings.HasSuffix(err.Error(), "connect: connection refused") {
+			status.state = stateClosed
+			return status
 		}
 
-		return true
+		if strings.HasSuffix(err.Error(), "connect: no route to host") {
+			status.state = stateHostUnreachable
+			return status
+		}
+
+		if strings.HasSuffix(err.Error(), "no such host") {
+			status.state = stateHostUnreachable
+			return status
+		}
+
+		if strings.HasSuffix(err.Error(), "network is unreachable") {
+			status.state = stateHostUnreachable
+			return status
+		}
+
+		if strings.HasSuffix(err.Error(), "i/o timeout") {
+			status.state = stateTimeout
+			return status
+		}
+
+		if strings.HasSuffix(err.Error(), "operation was canceled") {
+			status.state = stateTimeout
+			return status
+		}
+
+		status.state = stateUnknown
+		return status
 	}
-	return false
+
+	return status
 }
 
 func makeTCPConnection(host string, timeoutTCPMillis int, port int) error {
@@ -177,61 +227,6 @@ type portInfo struct {
 	Weight   float64
 }
 
-func getNmapPortData(protocol string) []int {
-
-	csvFile, err := os.Open("/usr/share/nmap/nmap-services")
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	defer csvFile.Close()
-
-	var allRecords []portInfo
-
-	scanner := bufio.NewScanner(csvFile)
-
-	re := regexp.MustCompile(`^([^\t]+)\t([0-9]+)/(tcp|udp)\t([0-9\.]+)`)
-	// optionally, resize scanner's capacity for lines over 64K, see next example
-	for scanner.Scan() {
-		each := re.FindStringSubmatch(scanner.Text())
-
-		if len(each) > 0 {
-			portNumber, _ := strconv.Atoi(each[2])
-			weight, _ := strconv.ParseFloat(each[4], 6)
-			allRecords = append(allRecords, portInfo{
-				each[1],
-				each[3],
-				portNumber,
-				weight,
-			})
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	sort.Slice(allRecords, func(i, j int) bool {
-		return allRecords[i].Weight > allRecords[j].Weight
-	})
-
-	portsByWeight := []int{}
-	for _, port := range allRecords {
-		if port.Protocol == protocol {
-			portsByWeight = append(portsByWeight, port.Port)
-		}
-	}
-
-	return portsByWeight
-}
-
-var ports []int
-
-func init() {
-	ports = getNmapPortData("tcp")
-}
-
 func ExpandCIDR(cidr string) []string {
 	prefix, err := netip.ParsePrefix(cidr)
 	if err != nil {
@@ -239,7 +234,7 @@ func ExpandCIDR(cidr string) []string {
 	}
 
 	var ips []string
-	for addr := prefix.Addr(); prefix.Contains(addr); addr = addr.Next() {
+	for addr := prefix.Masked().Addr(); prefix.Contains(addr); addr = addr.Next() {
 		ips = append(ips, addr.String())
 	}
 
