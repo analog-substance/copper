@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -12,52 +13,25 @@ import (
 
 type ScanResult struct {
 	Host  string
-	Ports []int
+	Ports []ProbeResult
 	Error error
 }
+
+var portsMap map[int]nmapservices.PortInfo
+var ports []nmapservices.PortInfo
 
 func scanHostsWorker(wg *sync.WaitGroup, hosts chan string, results chan ScanResult, timeoutTCPMillis int, topPorts int, rate int) {
 	defer wg.Done()
 
-	ports := nmapservices.TopTCPPorts(topPorts)
-	// fmt.Printf("Num ports: %d\n", len(ports))
 	for host := range hosts {
-		// fmt.Printf("[+] Scanning host %s\n", host)
 		result := ScanResult{
 			Host: host,
 		}
 
-		portChan := make(chan int)
-		portResults := make(chan portStatus)
+		portChan := make(chan nmapservices.PortInfo)
+		portResults := make(chan ProbeResult)
 
 		ctx, cancel := context.WithCancel(context.Background())
-
-		// for _, port := range ports {
-		// 	status := checkPort(host, timeoutTCPMillis, port.Port)
-		// 	if status.state == stateTimeout {
-		// 		continue
-		// 	}
-
-		// 	if status.isHostDown() {
-		// 		result.Error = fmt.Errorf("host is down: %v", status.err)
-		// 		break
-		// 	}
-
-		// 	// If the state is unknown, just append the error until this is more fleshed out
-		// 	if status.state == stateUnknown {
-		// 		err := status.err
-		// 		if result.Error != nil {
-		// 			err = errors.Join(result.Error, err)
-		// 		}
-
-		// 		result.Error = err
-		// 		continue
-		// 	}
-
-		// 	if status.isOpen() {
-		// 		result.Ports = append(result.Ports, port.Port)
-		// 	}
-		// }
 
 		var wgPort sync.WaitGroup
 		go func() {
@@ -77,15 +51,13 @@ func scanHostsWorker(wg *sync.WaitGroup, hosts chan string, results chan ScanRes
 						return
 					}
 
-					// fmt.Printf("[+] Trying port %d\n", port)
-
 					wgPort.Add(1)
 					go func() {
 						defer wgPort.Done()
 
 						select {
 						case <-ctx.Done():
-						case portResults <- checkPort(host, timeoutTCPMillis, port):
+						case portResults <- checkPort(host, timeoutTCPMillis, port.Port):
 						}
 					}()
 				}
@@ -98,27 +70,25 @@ func scanHostsWorker(wg *sync.WaitGroup, hosts chan string, results chan ScanRes
 			for _, port := range ports {
 				select {
 				case <-ctx.Done():
-					// fmt.Println("Context is done")
 					return
-				case portChan <- port.Port:
+				case portChan <- port:
 				}
 			}
 		}()
 
 		for status := range portResults {
-			// fmt.Printf("Received status: %d\n", status.port)
-			if status.state == stateTimeout {
+			if status.State == stateTimeout {
 				continue
 			}
 
-			if status.isHostDown() {
-				result.Error = fmt.Errorf("host is down: %v", status.err)
+			if status.IsHostDown() {
+				result.Error = fmt.Errorf("host is down: %v", status.Err)
 				break
 			}
 
 			// If the state is unknown, just append the error until this is more fleshed out
-			if status.state == stateUnknown {
-				err := status.err
+			if status.State == stateUnknown {
+				err := status.Err
 				if result.Error != nil {
 					err = errors.Join(result.Error, err)
 				}
@@ -127,11 +97,16 @@ func scanHostsWorker(wg *sync.WaitGroup, hosts chan string, results chan ScanRes
 				continue
 			}
 
-			if status.isOpen() {
-				result.Ports = append(result.Ports, status.port)
+			if status.IsOpen() || status.IsClosed() {
+				status.Service = portsMap[status.Port].Service
+				result.Ports = append(result.Ports, status)
 			}
 		}
 		cancel()
+
+		sort.Slice(result.Ports, func(i, j int) bool {
+			return result.Ports[i].Port < result.Ports[j].Port
+		})
 
 		results <- result
 	}
@@ -142,6 +117,13 @@ func ScanHosts(hosts []string, timeoutTCPMillis int, topPorts int, threads int, 
 
 	go func() {
 		defer close(results)
+
+		ports = nmapservices.TopTCPPorts(topPorts)
+		portsMap = make(map[int]nmapservices.PortInfo)
+
+		for _, port := range ports {
+			portsMap[port.Port] = port
+		}
 
 		hostChan := make(chan string)
 

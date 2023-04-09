@@ -1,7 +1,5 @@
 github.com/analog-substance/fileutil v0.0.0-20230405231637-b9a0d0657f31 h1:fPYG64b7b3TkysdK0a6kBPRQpg6bmr//C+NwQop8drQ=
 github.com/analog-substance/fileutil v0.0.0-20230405231637-b9a0d0657f31/go.mod h1:h4AM9gesgW8iRKoGKFkJoSPKzEemDekUBYkVk6sKvfE=
-github.com/analog-substance/nmapservices v0.0.0-20230405231936-14fdbeb1d6ae h1:G8i+ilt7Q6fQNQOTYghp4cQt38miFXFOYzP1znK4soU=
-github.com/analog-substance/nmapservices v0.0.0-20230405231936-14fdbeb1d6ae/go.mod h1:OnTRJ/V56dqVxm3bWxkZF4LuKyz0zl84Jmd+7lFh5+M=
 github.com/analog-substance/nmapservices v0.0.0-20230406130518-419e929591cc h1:CFJE2otGEsNkIluzFPL+OY7hiN5BPC0kBiJPBcpb+U4=
 github.com/analog-substance/nmapservices v0.0.0-20230406130518-419e929591cc/go.mod h1:OnTRJ/V56dqVxm3bWxkZF4LuKyz0zl84Jmd+7lFh5+M=
 github.com/cpuguy83/go-md2man/v2 v2.0.2/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
@@ -26,6 +24,8 @@ github.com/rivo/uniseg v0.2.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJ
 github.com/rivo/uniseg v0.4.3 h1:utMvzDsuh3suAEnhH0RdHmoPbU648o6CvXxTx4SBMOw=
 github.com/rivo/uniseg v0.4.3/go.mod h1:FN3SvrM+Zdj16jyLfmOkMNblXMcoc8DfTHruCPUcx88=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
+github.com/ryanuber/columnize v2.1.2+incompatible h1:C89EOx/XBWwIXl8wm8OPJBd7kPF25UfsK2X7Ph/zCAk=
+github.com/ryanuber/columnize v2.1.2+incompatible/go.mod h1:sm1tb6uqfes/u+d4ooFouqFdy9/2g9QGwK3SQygK0Ts=
 github.com/schollz/progressbar/v3 v3.13.0 h1:9TeeWRcjW2qd05I8Kf9knPkW4vLM/hYoa6z9ABvxje8=
 github.com/schollz/progressbar/v3 v3.13.0/go.mod h1:ZBYnSuLAX2LU8P8UiKN/KgF2DY58AJC8yfVYLPC8Ly4=
 github.com/spf13/cobra v1.7.0 h1:hyqWnYt1ZQShIddO5kBpj3vu05/++x6tJ6dg8EC572I=

@@ -14,32 +14,42 @@ import (
 	"github.com/schollz/progressbar/v3"
 )
 
-type portState int
+type PortState int
 
 const (
-	stateClosed portState = iota
+	stateClosed PortState = iota
 	stateOpen
 	stateHostUnreachable
 	stateTimeout
+	stateReset
 	stateUnknown
 )
 
-type portStatus struct {
-	port  int
-	state portState
-	err   error
+const (
+	unknownService string = "unknown"
+)
+
+type ProbeResult struct {
+	Port    int
+	Service string
+	State   PortState
+	Err     error
 }
 
-func (p portStatus) isOpen() bool {
-	return p.state == stateOpen
+func (p ProbeResult) IsOpen() bool {
+	return p.State == stateOpen
 }
 
-func (p portStatus) isOpenOrClosed() bool {
-	return p.isOpen() || p.state == stateClosed
+func (p ProbeResult) IsClosed() bool {
+	return p.State == stateClosed
 }
 
-func (p portStatus) isHostDown() bool {
-	return p.state == stateHostUnreachable
+func (p ProbeResult) IsOpenOrClosed() bool {
+	return p.IsOpen() || p.State == stateClosed
+}
+
+func (p ProbeResult) IsHostDown() bool {
+	return p.State == stateHostUnreachable
 }
 
 func HostRespondsToICMP(host string, timeoutMillisICMP int, privilegedICMP bool) bool {
@@ -68,63 +78,69 @@ func HostRespondsToICMP(host string, timeoutMillisICMP int, privilegedICMP bool)
 func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
 	for _, port := range nmapservices.TopTCPPorts(portCheckCount) {
 		status := checkPort(host, timeoutTCPMillis, port.Port)
-		if status.isOpenOrClosed() {
+		if status.IsOpenOrClosed() {
 			return true
 		}
 
-		if status.isHostDown() {
+		if status.IsHostDown() {
 			return false
 		}
 
-		if status.state == stateUnknown {
-			fmt.Println(status.err) // Kept this in here but should move this to the cobra commands
+		if status.State == stateUnknown {
+			fmt.Println(status.Err) // Kept this in here but should move this to the cobra commands
 		}
 	}
 
 	return false
 }
 
-func checkPort(host string, timeoutTCPMillis int, port int) portStatus {
-	status := portStatus{
-		port:  port,
-		state: stateOpen,
+func checkPort(host string, timeoutTCPMillis int, port int) ProbeResult {
+	status := ProbeResult{
+		Port:    port,
+		State:   stateOpen,
+		Service: unknownService,
 	}
 
 	err := makeTCPConnection(host, timeoutTCPMillis, port)
 	if err != nil {
-		status.err = err
+		status.Err = err
 
 		if strings.HasSuffix(err.Error(), "connect: connection refused") {
-			status.state = stateClosed
+			status.State = stateClosed
+			return status
+		}
+
+		if strings.HasSuffix(err.Error(), "connect: connection reset by peer") {
+			status.State = stateReset
 			return status
 		}
 
 		if strings.HasSuffix(err.Error(), "connect: no route to host") {
-			status.state = stateHostUnreachable
+			status.State = stateHostUnreachable
 			return status
 		}
 
 		if strings.HasSuffix(err.Error(), "no such host") {
-			status.state = stateHostUnreachable
+			status.State = stateHostUnreachable
 			return status
 		}
 
 		if strings.HasSuffix(err.Error(), "network is unreachable") {
-			status.state = stateHostUnreachable
+			status.State = stateHostUnreachable
 			return status
 		}
 
 		if strings.HasSuffix(err.Error(), "i/o timeout") {
-			status.state = stateTimeout
+			status.State = stateTimeout
 			return status
 		}
 
 		if strings.HasSuffix(err.Error(), "operation was canceled") {
-			status.state = stateTimeout
+			status.State = stateTimeout
 			return status
 		}
 
-		status.state = stateUnknown
+		status.State = stateUnknown
 		return status
 	}
 
@@ -183,7 +199,7 @@ func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP
 	activeHosts := []string{}
 	inactiveHosts := []string{}
 
-	for i, _ := range result {
+	for i := range result {
 		result[i] = <-c
 		bar.Add(1)
 		if result[i].active {
@@ -218,13 +234,6 @@ type hostStatus struct {
 	host   string
 	method string
 	active bool
-}
-
-type portInfo struct {
-	Service  string
-	Protocol string
-	Port     int
-	Weight   float64
 }
 
 func ExpandCIDR(cidr string) []string {

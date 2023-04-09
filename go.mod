@@ -4,13 +4,14 @@ go 1.19
 
 require (
 	github.com/analog-substance/nmapservices v0.0.0-20230406130518-419e929591cc
+	github.com/analog-substance/fileutil v0.0.0-20230405231637-b9a0d0657f31
 	github.com/prometheus-community/pro-bing v0.1.0
+	github.com/ryanuber/columnize v2.1.2+incompatible
 	github.com/schollz/progressbar/v3 v3.13.0
 	github.com/spf13/cobra v1.7.0
 )
 
 require (
-	github.com/analog-substance/fileutil v0.0.0-20230405231637-b9a0d0657f31 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/mattn/go-runewidth v0.0.14 // indirect
@@ -22,3 +23,5 @@ require (
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/term v0.5.0 // indirect
 )
+
+replace github.com/analog-substance/fileutil v0.0.0-20230405231637-b9a0d0657f31 => /home/kali/opt/fileutil
