@@ -1,7 +1,6 @@
 package lib
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	probing "github.com/prometheus-community/pro-bing"
@@ -9,10 +8,6 @@ import (
 	"log"
 	"net"
 	"net/netip"
-	"os"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -40,11 +35,8 @@ func HostRespondsToICMP(host string, timeoutMillisICMP int, privilegedICMP bool)
 	return false
 }
 
-func HostHasOpenPort(host string, timeoutTCPMillis, portCheckCount int) bool {
-	for i, port := range ports {
-		if i == portCheckCount {
-			return false
-		}
+func HostHasOpenPort(host string, ports []int, timeoutTCPMillis int) bool {
+	for _, port := range ports {
 		err := makeTCPConnection(host, timeoutTCPMillis, port)
 
 		if err != nil {
@@ -95,13 +87,13 @@ func makeTCPConnection(host string, timeoutTCPMillis int, port int) error {
 	return err
 }
 
-func checkHost(host string, c chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int, privilegedICMP bool) {
+func checkHost(host string, c chan hostStatus, ports []int, timeoutMillisICMP, timeoutTCPMillis int, privilegedICMP bool) {
 	if timeoutMillisICMP > 0 && HostRespondsToICMP(host, timeoutMillisICMP, privilegedICMP) {
 		c <- hostStatus{host, "ICMP", true}
 		return
 	}
 
-	if timeoutTCPMillis > 0 && HostHasOpenPort(host, timeoutTCPMillis, portCheckCount) {
+	if timeoutTCPMillis > 0 && HostHasOpenPort(host, ports, timeoutTCPMillis) {
 		c <- hostStatus{host, "TCP Ports", true}
 		return
 	}
@@ -109,9 +101,10 @@ func checkHost(host string, c chan hostStatus, timeoutMillisICMP, timeoutTCPMill
 	c <- hostStatus{host, "", false}
 }
 
-func worker(hosts chan string, res chan hostStatus, timeoutMillisICMP, timeoutTCPMillis, portCheckCount int, privilegedICMP bool) {
+func worker(hosts chan string, res chan hostStatus, ports []int, timeoutMillisICMP, timeoutTCPMillis int, privilegedICMP bool) {
+
 	for host := range hosts {
-		checkHost(host, res, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, privilegedICMP)
+		checkHost(host, res, ports, timeoutMillisICMP, timeoutTCPMillis, privilegedICMP)
 	}
 }
 
@@ -119,8 +112,11 @@ func DiscoverHosts(hosts []string, verboseMode bool, attempts, timeoutMillisICMP
 	bar := progressbar.Default(int64(len(hosts)))
 	workers := make(chan string, workerCount)
 	c := make(chan hostStatus)
+
+	ports := GetTopPopularPorts("tcp", portCheckCount)
+
 	for i := 0; i < cap(workers); i++ {
-		go worker(workers, c, timeoutMillisICMP, timeoutTCPMillis, portCheckCount, privilegedICMP)
+		go worker(workers, c, ports, timeoutMillisICMP, timeoutTCPMillis, privilegedICMP)
 	}
 
 	go func() {
@@ -168,68 +164,6 @@ type hostStatus struct {
 	host   string
 	method string
 	active bool
-}
-
-type portInfo struct {
-	Service  string
-	Protocol string
-	Port     int
-	Weight   float64
-}
-
-func getNmapPortData(protocol string) []int {
-
-	csvFile, err := os.Open("/usr/share/nmap/nmap-services")
-
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	defer csvFile.Close()
-
-	var allRecords []portInfo
-
-	scanner := bufio.NewScanner(csvFile)
-
-	re := regexp.MustCompile(`^([^\t]+)\t([0-9]+)/(tcp|udp)\t([0-9\.]+)`)
-	// optionally, resize scanner's capacity for lines over 64K, see next example
-	for scanner.Scan() {
-		each := re.FindStringSubmatch(scanner.Text())
-
-		if len(each) > 0 {
-			portNumber, _ := strconv.Atoi(each[2])
-			weight, _ := strconv.ParseFloat(each[4], 6)
-			allRecords = append(allRecords, portInfo{
-				each[1],
-				each[3],
-				portNumber,
-				weight,
-			})
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
-	}
-
-	sort.Slice(allRecords, func(i, j int) bool {
-		return allRecords[i].Weight > allRecords[j].Weight
-	})
-
-	portsByWeight := []int{}
-	for _, port := range allRecords {
-		if port.Protocol == protocol {
-			portsByWeight = append(portsByWeight, port.Port)
-		}
-	}
-
-	return portsByWeight
-}
-
-var ports []int
-
-func init() {
-	ports = getNmapPortData("tcp")
 }
 
 func ExpandCIDR(cidr string) []string {
