@@ -127,16 +127,20 @@ func GetOpenPortsOnHost(host string, ports []int, timeoutTCPMillis int) []int {
 }
 
 func makeTCPConnection(host string, timeoutTCPMillis int, port int) error {
-	d := net.Dialer{}
+	d := net.Dialer{
+		Timeout:  time.Duration(timeoutTCPMillis) * time.Millisecond,
+		Deadline: time.Now().Add(time.Duration(timeoutTCPMillis) * time.Millisecond),
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutTCPMillis)*time.Millisecond)
 	//defer cancel()
 	go func() {
 		time.Sleep(time.Duration(timeoutTCPMillis) * time.Millisecond)
 		cancel()
 	}()
-	_, err := d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
-
-	//_, err := d.Dial("tcp", fmt.Sprintf("%s:%d", host, port))
+	conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
+	if err == nil {
+		conn.Close()
+	}
 	return err
 }
 
