@@ -33,6 +33,15 @@ If a method succeeds, the host is marked as active and not touched again.
 		verboseMode, _ := cmd.Flags().GetBool("verbose")
 		workerCount, _ := cmd.Flags().GetInt("workers")
 		privilegedICMP, _ := cmd.Flags().GetBool("privileged")
+		host, _ := cmd.Flags().GetString("host")
+
+		if host != "" {
+			ports := lib.GetOpenPortsOnHost(host, lib.GetTopPopularPorts("tcp", tcpPortCount), timeoutTCP)
+			for _, port := range ports {
+				fmt.Printf("%s:%d\n", host, port)
+			}
+			return
+		}
 
 		start := time.Now()
 
@@ -108,4 +117,5 @@ func init() {
 	rootCmd.Flags().IntP("workers", "w", 0, "Worker count. defaults to the number of hosts")
 	rootCmd.Flags().IntP("attempts", "a", 1, "Number of attempts per host")
 	rootCmd.Flags().StringP("file", "f", "scope.txt", "File with scope to check")
+	rootCmd.Flags().String("host", "", "Used to test port scanning a host")
 }

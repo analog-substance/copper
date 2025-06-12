@@ -73,6 +73,59 @@ func HostHasOpenPort(host string, ports []int, timeoutTCPMillis int) bool {
 	return false
 }
 
+func GetOpenPortsOnHost(host string, ports []int, timeoutTCPMillis int) []int {
+	portResults := map[int]bool{}
+
+	for _, port := range ports {
+		err := makeTCPConnection(host, timeoutTCPMillis, port)
+
+		if err != nil {
+			if strings.HasSuffix(err.Error(), "connect: connection refused") {
+				portResults[port] = false
+				continue
+			}
+
+			if strings.HasSuffix(err.Error(), "connect: no route to host") {
+				portResults[port] = false
+				continue
+			}
+
+			if strings.HasSuffix(err.Error(), "no such host") {
+				portResults[port] = false
+				continue
+			}
+
+			if strings.HasSuffix(err.Error(), "network is unreachable") {
+				portResults[port] = false
+				continue
+			}
+
+			if strings.HasSuffix(err.Error(), "i/o timeout") {
+				portResults[port] = false
+				continue
+			}
+
+			if strings.HasSuffix(err.Error(), "operation was canceled") {
+				portResults[port] = false
+				continue
+			}
+
+			continue
+		}
+
+		portResults[port] = true
+	}
+
+	openPorts := []int{}
+	for port, open := range portResults {
+		if open {
+			openPorts = append(openPorts, port)
+		}
+	}
+
+	return openPorts
+}
+
 func makeTCPConnection(host string, timeoutTCPMillis int, port int) error {
 	d := net.Dialer{}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutTCPMillis)*time.Millisecond)
