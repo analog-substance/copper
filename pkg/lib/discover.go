@@ -135,10 +135,29 @@ func makeTCPConnection(host string, timeoutTCPMillis int, port int) error {
 	//defer cancel()
 	go func() {
 		time.Sleep(time.Duration(timeoutTCPMillis) * time.Millisecond)
+		log.Println("closing TCP connection")
+
 		cancel()
 	}()
-	conn, err := d.DialContext(ctx, "tcp", fmt.Sprintf("%s:%d", host, port))
+	endpoint := fmt.Sprintf("%s:%d", host, port)
+	conn, err := d.DialContext(ctx, "tcp", endpoint)
 	if err == nil {
+		log.Println("get banner", endpoint)
+
+		_, err := conn.Write([]byte("\x00khksdhfkasdkfjhaskjdfhkashdfkasldf\r\n"))
+		if err != nil {
+			log.Println("write error", err)
+		} else {
+			log.Println("sent garbage")
+		}
+
+		var banner = make([]byte, 1024)
+		i, err := conn.Read(banner)
+		if err != nil {
+			log.Println("error reading banner", err)
+		} else {
+			log.Println("banner", string(banner[:i]))
+		}
 		conn.Close()
 	}
 	return err
